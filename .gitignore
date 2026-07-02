@@ -1,0 +1,21 @@
+# Secrets — NEVER upload these
+.streamlit/secrets.toml
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ChromaDB local database files
+chroma_db/
+
+# VS Code settings
+.vscode/
+
+# Environment files
+.env
+*.env
+
+# OS junk files
+.DS_Store
+Thumbs.db
