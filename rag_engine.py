@@ -8,7 +8,7 @@ import pypdf
 import chromadb
 from groq import Groq
 from sentence_transformers import SentenceTransformer
-from prompts import SUMMARY_PROMPT, JD_MATCH_PROMPT, QA_PROMPT, STAR_OPTIMIZER_PROMPT, PARSE_RESUME_TO_JSON_PROMPT
+from prompts import SUMMARY_PROMPT, JD_MATCH_PROMPT, QA_PROMPT, STAR_OPTIMIZER_PROMPT, PARSE_RESUME_TO_JSON_PROMPT, RESUME_CLASSIFIER_PROMPT
 
 def get_groq_client(custom_key):
     """
@@ -38,6 +38,29 @@ def get_chroma_client():
     Initializes an in-memory ChromaDB client for session isolation.
     """
     return chromadb.EphemeralClient()
+
+def classify_is_resume(groq_client, raw_text, model="llama-3.3-70b-versatile"):
+    """
+    Uses the LLM to classify whether the uploaded PDF is a resume or not.
+    Returns True if it is a resume, False otherwise.
+    """
+    sample_text = raw_text[:1500].strip()
+    
+    if not sample_text:
+        return False
+    
+    response = groq_client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": RESUME_CLASSIFIER_PROMPT},
+            {"role": "user", "content": f"Classify this document:\n\n{sample_text}"}
+        ],
+        temperature=0,
+        max_tokens=10
+    )
+    
+    result = response.choices[0].message.content.strip().upper()
+    return result == "RESUME"
 
 def extract_pdf_pages(uploaded_file):
     """

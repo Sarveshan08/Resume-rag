@@ -148,3 +148,17 @@ Important Rules:
 2. Distinguish between 'technical' (tools, languages like Python, SQL, Excel), 'concepts' (domain terms like Supervised Learning, Computer Vision), and 'soft' (skills like Communication, Collaboration).
 3. If a field is missing, use empty strings "" or empty lists [] as appropriate.
 """
+
+RESUME_CLASSIFIER_PROMPT = """You are a strict document type classifier.
+You will be given a sample of text extracted from a PDF document.
+Your ONLY job is to determine whether this document is a RESUME / CV or not.
+
+A resume/CV typically contains:
+- A person's name and contact info (email, phone, LinkedIn)
+- Sections like Education, Work Experience, Skills, Projects, Certifications, or Achievements
+- Bullet points describing job roles, accomplishments, or academic qualifications
+
+Respond with ONLY one of these two outputs (no extra text, no explanation):
+RESUME
+NOT_RESUME
+"""

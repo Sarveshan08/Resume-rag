@@ -15,7 +15,8 @@ from rag_engine import (
     perform_jd_gap_analysis,
     answer_resume_question,
     optimize_resume_bullet,
-    parse_resume_to_json
+    parse_resume_to_json,
+    classify_is_resume
 )
 from templates import get_classic_template, get_modern_sidebar_template
 
@@ -213,9 +214,35 @@ else:
 
     # Extraction and DB pipeline
     if st.session_state.pdf_pages is None:
-        with st.spinner("Extracting text from resume pages..."):
+        with st.spinner("Extracting text from PDF..."):
             st.session_state.pdf_pages = extract_pdf_pages(uploaded_file)
             st.session_state.chunks = chunk_pdf_pages(st.session_state.pdf_pages)
+
+        # ── Resume Classification Gate ──
+        with st.spinner("Verifying document type..."):
+            raw_sample = "\n\n".join([p["text"] for p in st.session_state.pdf_pages])
+            try:
+                is_resume = classify_is_resume(groq_client, raw_sample, model=llm_model)
+            except Exception:
+                is_resume = True  # Fail open if classifier errors
+
+        if not is_resume:
+            st.session_state.pdf_pages = None
+            st.session_state.chunks = None
+            st.session_state.current_file_name = ""
+            st.error("❌ **Invalid Document Detected**")
+            st.warning("""
+            The uploaded PDF does not appear to be a **resume or CV**.
+            
+            ResuMind only accepts resume PDFs containing:
+            - 👤 Personal contact details (name, email, phone)
+            - 🎓 Education background
+            - 💼 Work experience or projects
+            - 🛠 Skills and achievements
+            
+            Please upload a valid **resume PDF** to continue.
+            """)
+            st.stop()
             
         with st.spinner("Building semantic search vectors (ChromaDB)..."):
             st.session_state.chroma_collection = index_resume_chunks(
