@@ -130,11 +130,35 @@ st.sidebar.subheader("⚙️ API Configuration")
 custom_key = st.sidebar.text_input("Groq API Key", type="password", help="Enter your Groq API Key. Get one free at console.groq.com")
 llm_model = st.sidebar.selectbox("LLM Model Select", [
     "llama-3.3-70b-versatile",
-    "mixtral-8x7b-32768"
-], index=0)
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.8-27b"
+], index=0, help="Select LLM model. Use llama-3.1-8b-instant if 70B encounters rate limits or tier errors.")
 
 # Resolve API Key: sidebar input first, then Streamlit Secrets
 api_key = custom_key.strip() if custom_key else st.secrets.get("GROQ_API_KEY", "")
+
+# Display key status indicator
+if custom_key.strip():
+    st.sidebar.caption("🔑 Active Key: Using manual sidebar input")
+elif st.secrets.get("GROQ_API_KEY"):
+    st.sidebar.caption("🔒 Active Key: Using Streamlit Secrets")
+else:
+    st.sidebar.caption("⚠️ No API key provided")
+
+# Reset cached failures if user changes key or model
+if "last_api_key" not in st.session_state:
+    st.session_state.last_api_key = api_key
+if "last_llm_model" not in st.session_state:
+    st.session_state.last_llm_model = llm_model
+
+if api_key != st.session_state.last_api_key or llm_model != st.session_state.last_llm_model:
+    st.session_state.last_api_key = api_key
+    st.session_state.last_llm_model = llm_model
+    st.session_state.summary_report = None
+    st.session_state.resume_json = None
+    st.session_state.jd_match_report = None
+    st.session_state.messages = []
 
 # Block app if no key is provided
 if not api_key:
@@ -158,8 +182,19 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("📤 Document Upload")
 uploaded_file = st.sidebar.file_uploader("Upload candidate resume (PDF)", type="pdf")
 
-# Reset states if a different file is uploaded
-if uploaded_file is not None and uploaded_file.name != st.session_state.current_file_name:
+# Reset states on new file or file removal
+if uploaded_file is None:
+    if st.session_state.current_file_name != "":
+        st.session_state.current_file_name = ""
+        st.session_state.pdf_pages = None
+        st.session_state.chunks = None
+        st.session_state.summary_report = None
+        st.session_state.jd_match_report = None
+        st.session_state.chroma_collection = None
+        st.session_state.resume_json = None
+        st.session_state.messages = []
+        st.session_state.last_optimized_bullet = ""
+elif uploaded_file.name != st.session_state.current_file_name:
     st.session_state.current_file_name = uploaded_file.name
     st.session_state.pdf_pages = None
     st.session_state.chunks = None
@@ -169,6 +204,16 @@ if uploaded_file is not None and uploaded_file.name != st.session_state.current_
     st.session_state.resume_json = None
     st.session_state.messages = []
     st.session_state.last_optimized_bullet = ""
+
+# Sidebar manual reset / retry action
+if uploaded_file is not None:
+    if st.sidebar.button("🔄 Re-analyze Resume", use_container_width=True, help="Click to force a fresh analysis"):
+        st.session_state.pdf_pages = None
+        st.session_state.chunks = None
+        st.session_state.summary_report = None
+        st.session_state.resume_json = None
+        st.session_state.jd_match_report = None
+        st.rerun()
 
 # Main layout logic
 if uploaded_file is None:
@@ -271,7 +316,7 @@ else:
                 st.session_state.summary_report = get_resume_summary(groq_client, raw_text_full, model=llm_model)
             except Exception as e:
                 st.error(f"Error communicating with Groq: {e}")
-                st.session_state.summary_report = "Unable to fetch analysis. Check API Key configuration."
+                st.session_state.summary_report = f"FAILED: {e}"
 
     # Render Tabs
     tab_summary, tab_builder, tab_jd, tab_chat, tab_star, tab_raw = st.tabs([
@@ -286,7 +331,15 @@ else:
     # TAB 1: Summary & Scorecard
     with tab_summary:
         st.markdown("<h2 style='margin-bottom: 20px;'>Resume Review Dashboard</h2>", unsafe_allow_html=True)
-        st.markdown(st.session_state.summary_report)
+        if st.session_state.summary_report and st.session_state.summary_report.startswith("FAILED:"):
+            error_details = st.session_state.summary_report.replace("FAILED:", "").strip()
+            st.error(f"⚠️ **Could not generate analysis:** {error_details}")
+            st.info("💡 **Tips to resolve:**\n1. Select `llama-3.1-8b-instant` in the left sidebar.\n2. Verify that your Groq API key is valid at [console.groq.com/keys](https://console.groq.com/keys).\n3. Click the button below to retry.")
+            if st.button("🔁 Retry Analysis Now", type="primary"):
+                st.session_state.summary_report = None
+                st.rerun()
+        elif st.session_state.summary_report:
+            st.markdown(st.session_state.summary_report)
 
     # TAB 2: Resume Builder & PDF Export
     with tab_builder:
