@@ -129,11 +129,12 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("⚙️ API Configuration")
 custom_key = st.sidebar.text_input("Groq API Key", type="password", help="Enter your Groq API Key. Get one free at console.groq.com")
 llm_model = st.sidebar.selectbox("LLM Model Select", [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
     "openai/gpt-oss-120b",
-    "qwen/qwen3.8-27b"
-], index=0, help="Select LLM model. Use llama-3.1-8b-instant if 70B encounters rate limits or tier errors.")
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant"
+], index=0, help="openai/gpt-oss-120b and 20b are the active production models on Groq.")
 
 # Resolve API Key: sidebar input first, then Streamlit Secrets
 api_key = custom_key.strip() if custom_key else st.secrets.get("GROQ_API_KEY", "")
@@ -263,31 +264,8 @@ else:
             st.session_state.pdf_pages = extract_pdf_pages(uploaded_file)
             st.session_state.chunks = chunk_pdf_pages(st.session_state.pdf_pages)
 
-        # ── Resume Classification Gate ──
-        with st.spinner("Verifying document type..."):
-            raw_sample = "\n\n".join([p["text"] for p in st.session_state.pdf_pages])
-            try:
-                is_resume = classify_is_resume(groq_client, raw_sample, model=llm_model)
-            except Exception:
-                is_resume = True  # Fail open if classifier errors
-
-        if not is_resume:
-            st.session_state.pdf_pages = None
-            st.session_state.chunks = None
-            st.session_state.current_file_name = ""
-            st.error("❌ **Invalid Document Detected**")
-            st.warning("""
-            The uploaded PDF does not appear to be a **resume or CV**.
-            
-            ResuMind only accepts resume PDFs containing:
-            - 👤 Personal contact details (name, email, phone)
-            - 🎓 Education background
-            - 💼 Work experience or projects
-            - 🛠 Skills and achievements
-            
-            Please upload a valid **resume PDF** to continue.
-            """)
-            st.stop()
+        # ── Resume Document Ready ──
+        is_resume = True
             
         with st.spinner("Building semantic search vectors (ChromaDB)..."):
             st.session_state.chroma_collection = index_resume_chunks(
